@@ -11,7 +11,7 @@
     <main class="page-shell">
         <header class="topbar">
             <div class="brand"><span class="brand-dot"></span> Stock Lens</div>
-            <span class="version">自选股保存版 · V4</span>
+            <span class="version">自动行情版 · V5</span>
         </header>
 
         <section class="hero">
@@ -39,8 +39,9 @@
                     <label>我的持仓股数<div class="with-unit"><input id="shares" type="number" inputmode="numeric" step="1" min="1" placeholder="1000" required><span>股</span></div></label>
                 </div>
                 <div class="form-action">
-                    <div><p id="error-message" role="alert"></p><p id="save-message" role="status"></p><small>仅提供分析参考，不连接券商，不会自动交易或下单。</small></div>
+                    <div><p id="error-message" role="alert"></p><p id="quote-message" role="status"></p><p id="save-message" role="status"></p><small>仅提供分析参考，不连接券商，不会自动交易或下单。</small></div>
                     <div class="form-buttons">
+                        <button id="fetch-quote-button" class="quote-button" type="button"><span class="quote-button-text">获取行情</span><span class="button-loader"></span></button>
                         <button id="save-button" class="secondary-button" type="button">保存到自选股</button>
                         <button id="analyze-button" type="submit"><span class="button-text">开始分析</span><span class="button-loader"></span></button>
                     </div>
@@ -96,21 +97,6 @@
 
         <section class="watchlist-panel" aria-labelledby="watchlist-title">
             <div class="section-heading">
-                <div><span>03</span><h2 id="watchlist-title">我的自选股列表</h2></div>
-                <p id="watchlist-count">0 只自选股</p>
-            </div>
-            <div id="watchlist-empty" class="watchlist-empty">
-                <strong>还没有保存自选股</strong>
-                <span>填写股票代码、名称、成本和持仓股数后即可保存。</span>
-            </div>
-            <div id="watchlist-table-wrap" class="watchlist-table-wrap" hidden>
-                <table class="watchlist-table">
-                    <thead><tr><th>股票</th><th>成本价</th><th>持仓股数</th><th>最近当前价</th><th>最近浮动盈亏</th><th>操作</th></tr></thead>
-                    <tbody id="watchlist-body"></tbody>
-                </table>
-            </div>
-        </section>
-    </main>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
-</html>
+                <div><span>03</span><h2 id="watch…3044 tokens truncated…px; }.profit-card { padding: 21px; }.metrics-grid { grid-template-columns: 1fr 1fr; }.metrics-grid article { padding: 14px 12px; }.metrics-grid strong { font-size: 17px; }.levels-grid { grid-template-columns: 1fr; }.detail-grid { grid-template-columns: 1fr 1fr; }
+    .watchlist-table-wrap { overflow: visible; }.watchlist-table thead { display: none; }.watchlist-table,.watchlist-table tbody,.watchlist-table tr,.watchlist-table td { display: block; width: 100%; }.watchlist-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 15px; margin-bottom: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: #fbfcfb; }.watchlist-table tr:last-child { margin-bottom: 0; }.watchlist-table td { padding: 0; border: 0; white-space: normal; }.watchlist-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--muted); font-size: 10px; font-weight: 400; }.stock-cell,.row-actions { grid-column: 1 / -1; }.row-actions { display: flex !important; }.table-button { flex: 1; }
+}
