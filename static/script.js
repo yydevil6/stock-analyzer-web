@@ -3,7 +3,9 @@ const report = document.querySelector("#report");
 const button = document.querySelector("#analyze-button");
 const errorMessage = document.querySelector("#error-message");
 const saveMessage = document.querySelector("#save-message");
+const quoteMessage = document.querySelector("#quote-message");
 const saveButton = document.querySelector("#save-button");
+const fetchQuoteButton = document.querySelector("#fetch-quote-button");
 const stockCodeInput = document.querySelector("#stock-code");
 const byId = (id) => document.getElementById(id);
 const STORAGE_KEY = "stock-lens-watchlist-v1";
@@ -24,13 +26,54 @@ const inputIds = {
 
 stockCodeInput.addEventListener("input", () => {
     stockCodeInput.value = stockCodeInput.value.replace(/\D/g, "").slice(0, 6);
+    quoteMessage.textContent = "";
+    quoteMessage.className = "";
 });
 form.addEventListener("input", () => { errorMessage.textContent = ""; });
 form.addEventListener("input", () => { saveMessage.textContent = ""; });
 
 saveButton.addEventListener("click", saveCurrentStock);
+fetchQuoteButton.addEventListener("click", fetchQuote);
 byId("watchlist-body").addEventListener("click", handleWatchlistAction);
 renderWatchlist();
+
+async function fetchQuote() {
+    const stockCode = stockCodeInput.value.trim();
+    if (!/^\d{6}$/.test(stockCode)) {
+        errorMessage.textContent = "请先输入正确的 6 位 A 股股票代码";
+        stockCodeInput.focus();
+        return;
+    }
+
+    quoteMessage.className = "";
+    quoteMessage.textContent = "正在获取行情…";
+    setQuoteLoading(true);
+    try {
+        const response = await fetch(`/api/quote/${stockCode}`);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "行情获取失败");
+        fillQuoteData(result.data);
+        quoteMessage.textContent = result.message;
+        quoteMessage.className = result.success ? "quote-success" : "quote-warning";
+    } catch {
+        quoteMessage.textContent = "行情获取失败，已切换为手动输入模式";
+        quoteMessage.className = "quote-warning";
+    } finally {
+        setQuoteLoading(false);
+    }
+}
+
+function fillQuoteData(data) {
+    const quoteFields = ["stock_name", "current_price", "high_price", "low_price", "change_percent", "turnover", "volume_ratio"];
+    quoteFields.forEach((key) => {
+        if (data[key] !== undefined && data[key] !== null) byId(inputIds[key]).value = data[key];
+    });
+}
+
+function setQuoteLoading(loading) {
+    fetchQuoteButton.disabled = loading;
+    fetchQuoteButton.classList.toggle("loading", loading);
+}
 
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
