@@ -64,9 +64,23 @@ async function fetchQuote() {
 }
 
 function fillQuoteData(data) {
-    const quoteFields = ["stock_name", "current_price", "high_price", "low_price", "change_percent", "turnover", "volume_ratio"];
-    quoteFields.forEach((key) => {
-        if (data[key] !== undefined && data[key] !== null) byId(inputIds[key]).value = data[key];
+    const code = String(data.code ?? data.stock_code ?? stockCodeInput.value).trim();
+    const nameCandidates = [data.name, data.stock_name, data["股票名称"]];
+    const stockName = nameCandidates.find((value) => {
+        const candidate = String(value ?? "").trim();
+        return candidate && candidate !== code && /[\u4e00-\u9fff]/.test(candidate);
+    }) || "未知股票名称";
+    const fields = {
+        stock_name: stockName,
+        current_price: data.current_price,
+        high_price: data.high ?? data.high_price,
+        low_price: data.low ?? data.low_price,
+        change_percent: data.change_percent,
+        turnover: data.amount ?? data.turnover,
+        volume_ratio: data.volume_ratio,
+    };
+    Object.entries(fields).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) byId(inputIds[key]).value = value;
     });
 }
 
