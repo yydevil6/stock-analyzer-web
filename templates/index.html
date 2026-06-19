@@ -3,97 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="输入持仓信息，生成 A 股短线持仓分析报告">
-    <title>A 股持仓分析助手</title>
+    <meta name="description" content="手动输入行情与持仓数据，快速生成超短线自选股分析">
+    <title>超短线自选股分析</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <main class="page-shell">
-        <section class="hero">
+        <header class="topbar">
             <div class="brand"><span class="brand-dot"></span> Stock Lens</div>
-            <p class="eyebrow">A 股持仓分析 · V2</p>
-            <h1>你的持仓，值得看得更清楚。</h1>
-            <p class="subtitle">填写股票代码与持仓信息，一次看懂盈亏、风险和短线操作区间。</p>
+            <span class="version">手动行情版 · V3</span>
+        </header>
 
-            <form id="analysis-form" class="analysis-form" novalidate>
-                <div class="input-group code-input">
-                    <label for="stock-code">股票代码</label>
-                    <input id="stock-code" type="text" inputmode="numeric" maxlength="6"
-                           placeholder="例如 000547" autocomplete="off" required>
-                </div>
-                <div class="input-group">
-                    <label for="cost-price">我的买入成本价</label>
-                    <div class="input-with-unit">
-                        <input id="cost-price" type="number" inputmode="decimal" min="0.01" step="0.01"
-                               placeholder="例如 18.50" required>
-                        <span>元</span>
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label for="shares">我的持仓股数</label>
-                    <div class="input-with-unit">
-                        <input id="shares" type="number" inputmode="numeric" min="1" step="1"
-                               placeholder="例如 1000" required>
-                        <span>股</span>
-                    </div>
-                </div>
-                <button type="submit" id="analyze-button">
-                    <span class="button-text">开始分析</span>
-                    <span class="button-loader" aria-hidden="true"></span>
-                </button>
-            </form>
-            <p id="error-message" class="error-message" role="alert"></p>
-            <p class="mock-note">当前使用模拟行情，不构成任何投资建议。</p>
+        <section class="hero">
+            <p class="eyebrow">自选股分析</p>
+            <h1>盘中数据，快速判断。</h1>
+            <p>手动录入当前行情和持仓，立即生成超短线强弱评分与今日操作计划。</p>
         </section>
 
-        <section id="report" class="report" aria-live="polite" hidden>
-            <header class="report-header">
-                <div>
-                    <p class="eyebrow">持仓分析报告</p>
-                    <div class="stock-title"><h2 id="report-code">—</h2><span id="trend-badge">—</span></div>
+        <section class="input-panel">
+            <div class="section-heading">
+                <div><span>01</span><h2>行情与持仓</h2></div>
+                <p>所有数据仅在本次页面分析中使用</p>
+            </div>
+            <form id="analysis-form" novalidate>
+                <div class="form-grid">
+                    <label>股票代码<input id="stock-code" type="text" inputmode="numeric" maxlength="6" placeholder="000547" required></label>
+                    <label>股票名称<input id="stock-name" type="text" maxlength="20" placeholder="航天发展" required></label>
+                    <label>当前价<div class="with-unit"><input id="current-price" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="20.05" required><span>元</span></div></label>
+                    <label>今日最高价<div class="with-unit"><input id="high-price" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="20.60" required><span>元</span></div></label>
+                    <label>今日最低价<div class="with-unit"><input id="low-price" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="19.20" required><span>元</span></div></label>
+                    <label>今日涨跌幅<div class="with-unit"><input id="change-percent-input" type="number" inputmode="decimal" step="0.01" placeholder="3.20" required><span>%</span></div></label>
+                    <label>成交额<div class="with-unit"><input id="turnover-input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="12.50" required><span>亿元</span></div></label>
+                    <label>量比<input id="volume-ratio-input" type="number" inputmode="decimal" step="0.01" min="0" placeholder="1.35" required></label>
+                    <label>我的买入成本价<div class="with-unit"><input id="cost-price" type="number" inputmode="decimal" step="0.01" min="0.01" placeholder="18.50" required><span>元</span></div></label>
+                    <label>我的持仓股数<div class="with-unit"><input id="shares" type="number" inputmode="numeric" step="1" min="1" placeholder="1000" required><span>股</span></div></label>
                 </div>
-                <p class="report-time">模拟行情</p>
-            </header>
+                <div class="form-action">
+                    <div><p id="error-message" role="alert"></p><small>仅提供分析参考，不连接券商，不会自动交易或下单。</small></div>
+                    <button id="analyze-button" type="submit"><span class="button-text">开始分析</span><span class="button-loader"></span></button>
+                </div>
+            </form>
+        </section>
 
-            <div class="position-summary">
-                <article><span>当前价格</span><strong id="current-price">—</strong><small>元</small></article>
-                <article><span>买入成本</span><strong id="report-cost">—</strong><small>元</small></article>
-                <article><span>持仓股数</span><strong id="report-shares">—</strong><small>股</small></article>
+        <section id="report" class="report" hidden aria-live="polite">
+            <div class="section-heading report-heading">
+                <div><span>02</span><h2>分析结果</h2></div>
+                <div class="stock-id"><strong id="report-name">—</strong><small id="report-code">—</small></div>
+            </div>
+
+            <div class="dashboard-top">
+                <article class="score-card">
+                    <div class="score-ring" id="score-ring"><strong id="score">—</strong><span>/ 100</span></div>
+                    <div><span>超短线强弱评分</span><h3 id="strength">—</h3><p id="score-reasons">—</p></div>
+                </article>
+                <article id="profit-card" class="profit-card">
+                    <span>浮动盈亏</span><strong id="profit-loss">—</strong><p id="profit-ratio">—</p>
+                </article>
+            </div>
+
+            <div class="metrics-grid">
                 <article><span>当前市值</span><strong id="market-value">—</strong><small>元</small></article>
+                <article><span>距离成本价</span><strong id="cost-gap">—</strong><small id="cost-gap-ratio">—</small></article>
+                <article><span>距离今日最高价</span><strong id="high-gap">—</strong><small id="high-gap-ratio">—</small></article>
+                <article><span>距离今日最低价</span><strong id="low-gap">—</strong><small id="low-gap-ratio">—</small></article>
             </div>
 
-            <article id="profit-panel" class="profit-panel">
-                <div><span>浮动盈亏金额</span><strong id="profit-loss">—</strong></div>
-                <div><span>浮动盈亏比例</span><strong id="profit-ratio">—</strong></div>
-            </article>
-
-            <div class="action-grid">
-                <article class="action-card risk-card">
-                    <div class="card-heading"><span class="card-icon">↓</span><span>止损建议</span></div>
-                    <strong><span id="stop-loss">—</span> 元</strong>
-                    <p id="stop-loss-advice">—</p>
-                </article>
-                <article class="action-card target-card">
-                    <div class="card-heading"><span class="card-icon">↗</span><span>冲高卖出参考位</span></div>
-                    <strong><span id="sell-reference">—</span> 元</strong>
-                    <p>接近参考区间时可结合成交量，考虑分批减仓。</p>
-                </article>
+            <div class="levels-grid">
+                <article><span>止损参考位</span><strong><b id="stop-loss">—</b> 元</strong><p>跌破参考位时优先控制风险</p></article>
+                <article><span>冲高卖出参考位</span><strong><b id="sell-reference">—</b> 元</strong><p>接近参考位时观察量能并分批处理</p></article>
             </div>
 
-            <article class="advice-card">
-                <span>短线操作建议</span>
-                <p id="advice">—</p>
+            <article class="plan-card">
+                <span>今日操作计划</span>
+                <p id="plan">—</p>
             </article>
 
-            <details class="market-details">
-                <summary>查看模拟行情指标</summary>
-                <div class="metrics-grid">
-                    <article><span>今日涨跌幅</span><strong id="change-percent">—</strong></article>
-                    <article><span>MA5</span><strong id="ma5">—</strong></article>
-                    <article><span>MA10</span><strong id="ma10">—</strong></article>
-                    <article><span>MA20</span><strong id="ma20">—</strong></article>
-                    <article><span>成交额</span><strong id="turnover">—</strong></article>
-                    <article><span>量比</span><strong id="volume-ratio">—</strong></article>
+            <details class="position-details">
+                <summary>查看输入行情与第二版持仓数据</summary>
+                <div class="detail-grid">
+                    <span>当前价<strong id="detail-current">—</strong></span>
+                    <span>买入成本<strong id="detail-cost">—</strong></span>
+                    <span>持仓股数<strong id="detail-shares">—</strong></span>
+                    <span>今日涨跌幅<strong id="detail-change">—</strong></span>
+                    <span>成交额<strong id="detail-turnover">—</strong></span>
+                    <span>量比<strong id="detail-volume">—</strong></span>
                 </div>
             </details>
         </section>
