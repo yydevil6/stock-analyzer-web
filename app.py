@@ -13,6 +13,47 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__)
 STOCK_CODE_PATTERN = re.compile(r"^\d{6}$")
 QUOTE_TIMEOUT_SECONDS = 5
+LOCAL_STOCK_NAMES = {
+    "000547": "航天发展",
+    "002086": "东方海洋",
+    "000001": "平安银行",
+    "600519": "贵州茅台",
+    "300750": "宁德时代",
+}
+
+
+def resolve_stock_name(stock_code: str, *candidates: object) -> str:
+    """Return a real Chinese name; never use the stock code as its name."""
+    for candidate in candidates:
+        name = str(candidate or "").strip()
+        if name and name != stock_code and re.search(r"[\u4e00-\u9fff]", name):
+            return name
+    return LOCAL_STOCK_NAMES.get(stock_code, "未知股票名称")
+
+
+def normalize_quote_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Expose the V5 canonical API contract plus legacy aliases for the UI."""
+    code = str(data.get("code") or data.get("stock_code") or "").strip()
+    name = resolve_stock_name(code, data.get("name"), data.get("stock_name"), data.get("股票名称"))
+    normalized = {
+        "code": code,
+        "name": name,
+        "current_price": round(float(data["current_price"]), 2),
+        "high": round(float(data.get("high", data.get("high_price"))), 2),
+        "low": round(float(data.get("low", data.get("low_price"))), 2),
+        "change_percent": round(float(data["change_percent"]), 2),
+        "amount": round(float(data.get("amount", data.get("turnover"))), 2),
+        "volume_ratio": round(float(data["volume_ratio"]), 2),
+        "quote_time": data.get("quote_time", ""),
+    }
+    return {
+        **normalized,
+        "stock_code": normalized["code"],
+        "stock_name": normalized["name"],
+        "high_price": normalized["high"],
+        "low_price": normalized["low"],
+        "turnover": normalized["amount"],
+    }
 
 
 def market_symbol(stock_code: str) -> str:
@@ -38,17 +79,17 @@ def parse_tencent_quote(raw_text: str, stock_code: str) -> dict[str, Any]:
     if current_price <= 0 or high_price <= 0 or low_price <= 0:
         raise ValueError("Quote is not available")
 
-    return {
-        "stock_code": stock_code,
-        "stock_name": fields[1],
+    return normalize_quote_fields({
+        "code": stock_code,
+        "name": fields[1],
         "current_price": round(current_price, 2),
-        "high_price": round(high_price, 2),
-        "low_price": round(low_price, 2),
+        "high": round(high_price, 2),
+        "low": round(low_price, 2),
         "change_percent": round(float(fields[31]), 2),
-        "turnover": round(float(fields[56]) / 10000, 2),
+        "amount": round(float(fields[56]) / 10000, 2),
         "volume_ratio": round(float(fields[55]), 2),
         "quote_time": fields[29],
-    }
+    })
 
 
 def fetch_live_quote(stock_code: str) -> dict[str, Any]:
@@ -68,18 +109,17 @@ def build_fallback_quote(stock_code: str) -> dict[str, Any]:
     current_price = 20.05 if stock_code == "000547" else round(rng.uniform(6, 60), 2)
     low_price = round(current_price * rng.uniform(0.96, 0.99), 2)
     high_price = round(current_price * rng.uniform(1.01, 1.04), 2)
-    known_names = {"000547": "航天发展"}
-    return {
-        "stock_code": stock_code,
-        "stock_name": known_names.get(stock_code, f"股票{stock_code}"),
+    return normalize_quote_fields({
+        "code": stock_code,
+        "name": LOCAL_STOCK_NAMES.get(stock_code),
         "current_price": current_price,
-        "high_price": max(high_price, current_price),
-        "low_price": min(low_price, current_price),
+        "high": max(high_price, current_price),
+        "low": min(low_price, current_price),
         "change_percent": round(rng.uniform(-4, 5), 2),
-        "turnover": round(rng.uniform(1, 30), 2),
+        "amount": round(rng.uniform(1, 30), 2),
         "volume_ratio": round(rng.uniform(0.7, 2.2), 2),
         "quote_time": "模拟数据",
-    }
+    })
 
 
 def calculate_score(
@@ -196,13 +236,15 @@ def quote(stock_code: str):
 
     try:
         data = fetch_live_quote(stock_code)
-        return jsonify({"success": True, "mode": "live", "message": "行情获取成功", "data": data})
+        return jsonify({"success": True, "mode": "live", "message": "行情获取成功", "data": data, **data})
     except Exception:
+        data = build_fallback_quote(stock_code)
         return jsonify({
             "success": False,
             "mode": "fallback",
             "message": "行情获取失败，已切换为手动输入模式",
-            "data": build_fallback_quote(stock_code),
+            "data": data,
+            **data,
         })
 
 
