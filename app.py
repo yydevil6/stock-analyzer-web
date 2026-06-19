@@ -12,12 +12,12 @@ app = Flask(__name__)
 STOCK_CODE_PATTERN = re.compile(r"^\d{6}$")
 
 
-def build_mock_report(stock_code: str) -> dict[str, Any]:
-    """Build stable, realistic-looking mock data from a six-digit stock code."""
+def build_mock_report(stock_code: str, cost_price: float, shares: int) -> dict[str, Any]:
+    """Build a stable mock quote and calculate the user's position result."""
     seed = int(hashlib.sha256(stock_code.encode("utf-8")).hexdigest()[:16], 16)
     rng = random.Random(seed)
 
-    current_price = round(rng.uniform(5, 80), 2)
+    current_price = 20.05 if stock_code == "000547" else round(rng.uniform(5, 80), 2)
     change_percent = round(rng.uniform(-6.5, 7.5), 2)
     ma5 = round(current_price * rng.uniform(0.975, 1.025), 2)
     ma10 = round(current_price * rng.uniform(0.96, 1.04), 2)
@@ -37,11 +37,34 @@ def build_mock_report(stock_code: str) -> dict[str, Any]:
 
     support = round(min(current_price, ma10, ma20) * 0.985, 2)
     resistance = round(max(current_price, ma5, ma10) * 1.025, 2)
-    stop_loss = round(support * 0.97, 2)
+    stop_loss = round(min(support * 0.97, cost_price * 0.95), 2)
+    sell_reference = round(max(resistance, current_price * 1.06), 2)
+    market_value = round(current_price * shares, 2)
+    profit_loss = round((current_price - cost_price) * shares, 2)
+    profit_loss_ratio = round((current_price - cost_price) / cost_price * 100, 2)
+
+    if current_price <= stop_loss * 1.02:
+        stop_loss_advice = f"价格已接近止损区域 {stop_loss:.2f} 元，建议严格控制风险。"
+    else:
+        stop_loss_advice = f"可将 {stop_loss:.2f} 元作为短线止损参考，跌破后谨慎持有。"
+
+    if profit_loss_ratio >= 8:
+        position_advice = "当前已有一定浮盈，可分批止盈并上移保护位，避免利润回吐。"
+    elif profit_loss_ratio <= -5:
+        position_advice = "持仓处于亏损区间，不建议盲目补仓，优先执行止损纪律。"
+    elif trend == "偏强上行":
+        position_advice = "短线结构偏强，可继续观察，冲高接近参考位时考虑分批减仓。"
+    else:
+        position_advice = "短线方向仍需确认，建议控制仓位，等待放量突破或企稳信号。"
 
     return {
         "stock_code": stock_code,
         "current_price": current_price,
+        "cost_price": round(cost_price, 2),
+        "shares": shares,
+        "market_value": market_value,
+        "profit_loss": profit_loss,
+        "profit_loss_ratio": profit_loss_ratio,
         "change_percent": change_percent,
         "ma5": ma5,
         "ma10": ma10,
@@ -52,7 +75,10 @@ def build_mock_report(stock_code: str) -> dict[str, Any]:
         "support": support,
         "resistance": resistance,
         "stop_loss": stop_loss,
-        "advice": advice,
+        "stop_loss_advice": stop_loss_advice,
+        "sell_reference": sell_reference,
+        "advice": position_advice,
+        "market_advice": advice,
     }
 
 
@@ -69,7 +95,18 @@ def analyze():
     if not STOCK_CODE_PATTERN.fullmatch(stock_code):
         return jsonify({"error": "请输入正确的 6 位 A 股股票代码"}), 400
 
-    return jsonify(build_mock_report(stock_code))
+    try:
+        cost_price = float(payload.get("cost_price", 0))
+        shares_value = float(payload.get("shares", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "买入成本和持仓股数必须是有效数字"}), 400
+
+    if cost_price <= 0:
+        return jsonify({"error": "买入成本必须大于 0"}), 400
+    if shares_value <= 0 or not shares_value.is_integer():
+        return jsonify({"error": "持仓股数必须是大于 0 的整数"}), 400
+
+    return jsonify(build_mock_report(stock_code, cost_price, int(shares_value)))
 
 
 if __name__ == "__main__":
