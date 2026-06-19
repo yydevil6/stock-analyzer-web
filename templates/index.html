@@ -11,7 +11,7 @@
     <main class="page-shell">
         <header class="topbar">
             <div class="brand"><span class="brand-dot"></span> Stock Lens</div>
-            <span class="version">手动行情版 · V3</span>
+            <span class="version">自选股保存版 · V4</span>
         </header>
 
         <section class="hero">
@@ -39,8 +39,11 @@
                     <label>我的持仓股数<div class="with-unit"><input id="shares" type="number" inputmode="numeric" step="1" min="1" placeholder="1000" required><span>股</span></div></label>
                 </div>
                 <div class="form-action">
-                    <div><p id="error-message" role="alert"></p><small>仅提供分析参考，不连接券商，不会自动交易或下单。</small></div>
-                    <button id="analyze-button" type="submit"><span class="button-text">开始分析</span><span class="button-loader"></span></button>
+                    <div><p id="error-message" role="alert"></p><p id="save-message" role="status"></p><small>仅提供分析参考，不连接券商，不会自动交易或下单。</small></div>
+                    <div class="form-buttons">
+                        <button id="save-button" class="secondary-button" type="button">保存到自选股</button>
+                        <button id="analyze-button" type="submit"><span class="button-text">开始分析</span><span class="button-loader"></span></button>
+                    </div>
                 </div>
             </form>
         </section>
@@ -89,6 +92,23 @@
                     <span>量比<strong id="detail-volume">—</strong></span>
                 </div>
             </details>
+        </section>
+
+        <section class="watchlist-panel" aria-labelledby="watchlist-title">
+            <div class="section-heading">
+                <div><span>03</span><h2 id="watchlist-title">我的自选股列表</h2></div>
+                <p id="watchlist-count">0 只自选股</p>
+            </div>
+            <div id="watchlist-empty" class="watchlist-empty">
+                <strong>还没有保存自选股</strong>
+                <span>填写股票代码、名称、成本和持仓股数后即可保存。</span>
+            </div>
+            <div id="watchlist-table-wrap" class="watchlist-table-wrap" hidden>
+                <table class="watchlist-table">
+                    <thead><tr><th>股票</th><th>成本价</th><th>持仓股数</th><th>最近当前价</th><th>最近浮动盈亏</th><th>操作</th></tr></thead>
+                    <tbody id="watchlist-body"></tbody>
+                </table>
+            </div>
         </section>
     </main>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
