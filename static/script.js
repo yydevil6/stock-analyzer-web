@@ -1,52 +1,44 @@
 const form = document.querySelector("#analysis-form");
-const input = document.querySelector("#stock-code");
+const stockInput = document.querySelector("#stock-code");
+const costInput = document.querySelector("#cost-price");
+const sharesInput = document.querySelector("#shares");
 const button = document.querySelector("#analyze-button");
 const report = document.querySelector("#report");
 const errorMessage = document.querySelector("#error-message");
 
-const fields = {
-    reportCode: document.querySelector("#report-code"),
-    currentPrice: document.querySelector("#current-price"),
-    changePercent: document.querySelector("#change-percent"),
-    ma5: document.querySelector("#ma5"),
-    ma10: document.querySelector("#ma10"),
-    ma20: document.querySelector("#ma20"),
-    turnover: document.querySelector("#turnover"),
-    volumeRatio: document.querySelector("#volume-ratio"),
-    trend: document.querySelector("#trend"),
-    trendBadge: document.querySelector("#trend-badge"),
-    support: document.querySelector("#support"),
-    resistance: document.querySelector("#resistance"),
-    stopLoss: document.querySelector("#stop-loss"),
-    advice: document.querySelector("#advice"),
-};
+const byId = (id) => document.getElementById(id);
+const money = (value) => Number(value).toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+});
 
-input.addEventListener("input", () => {
-    input.value = input.value.replace(/\D/g, "").slice(0, 6);
+stockInput.addEventListener("input", () => {
+    stockInput.value = stockInput.value.replace(/\D/g, "").slice(0, 6);
     errorMessage.textContent = "";
 });
 
+form.addEventListener("input", () => { errorMessage.textContent = ""; });
+
 form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const stockCode = input.value.trim();
+    const stockCode = stockInput.value.trim();
+    const costPrice = Number(costInput.value);
+    const shares = Number(sharesInput.value);
 
-    if (!/^\d{6}$/.test(stockCode)) {
-        errorMessage.textContent = "请输入正确的 6 位 A 股股票代码";
-        input.focus();
+    const validationError = validateInputs(stockCode, costPrice, shares);
+    if (validationError) {
+        errorMessage.textContent = validationError;
         return;
     }
 
     setLoading(true);
-    errorMessage.textContent = "";
-
     try {
         const response = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stock_code: stockCode }),
+            body: JSON.stringify({ stock_code: stockCode, cost_price: costPrice, shares }),
         });
         const data = await response.json();
-
         if (!response.ok) throw new Error(data.error || "分析失败，请稍后重试");
 
         renderReport(data);
@@ -59,25 +51,39 @@ form.addEventListener("submit", async (event) => {
     }
 });
 
+function validateInputs(stockCode, costPrice, shares) {
+    if (!/^\d{6}$/.test(stockCode)) return "请输入正确的 6 位 A 股股票代码";
+    if (!Number.isFinite(costPrice) || costPrice <= 0) return "请输入大于 0 的买入成本价";
+    if (!Number.isInteger(shares) || shares <= 0) return "持仓股数必须是大于 0 的整数";
+    return "";
+}
+
 function setLoading(isLoading) {
     button.disabled = isLoading;
     button.classList.toggle("loading", isLoading);
 }
 
 function renderReport(data) {
-    fields.reportCode.textContent = data.stock_code;
-    fields.currentPrice.textContent = Number(data.current_price).toFixed(2);
-    fields.changePercent.textContent = `${data.change_percent > 0 ? "+" : ""}${Number(data.change_percent).toFixed(2)}%`;
-    fields.changePercent.className = `change ${data.change_percent >= 0 ? "up" : "down"}`;
-    fields.ma5.textContent = Number(data.ma5).toFixed(2);
-    fields.ma10.textContent = Number(data.ma10).toFixed(2);
-    fields.ma20.textContent = Number(data.ma20).toFixed(2);
-    fields.turnover.textContent = `${Number(data.turnover).toFixed(2)} 亿元`;
-    fields.volumeRatio.textContent = Number(data.volume_ratio).toFixed(2);
-    fields.trend.textContent = data.trend;
-    fields.trendBadge.textContent = data.trend;
-    fields.support.textContent = Number(data.support).toFixed(2);
-    fields.resistance.textContent = Number(data.resistance).toFixed(2);
-    fields.stopLoss.textContent = Number(data.stop_loss).toFixed(2);
-    fields.advice.textContent = data.advice;
+    const isProfit = data.profit_loss >= 0;
+    const sign = isProfit ? "+" : "";
+
+    byId("report-code").textContent = data.stock_code;
+    byId("trend-badge").textContent = data.trend;
+    byId("current-price").textContent = money(data.current_price);
+    byId("report-cost").textContent = money(data.cost_price);
+    byId("report-shares").textContent = Number(data.shares).toLocaleString("zh-CN");
+    byId("market-value").textContent = money(data.market_value);
+    byId("profit-loss").textContent = `${sign}${money(data.profit_loss)} 元`;
+    byId("profit-ratio").textContent = `${sign}${Number(data.profit_loss_ratio).toFixed(2)}%`;
+    byId("profit-panel").className = `profit-panel ${isProfit ? "profit" : "loss"}`;
+    byId("stop-loss").textContent = money(data.stop_loss);
+    byId("stop-loss-advice").textContent = data.stop_loss_advice;
+    byId("sell-reference").textContent = money(data.sell_reference);
+    byId("advice").textContent = data.advice;
+    byId("change-percent").textContent = `${data.change_percent > 0 ? "+" : ""}${Number(data.change_percent).toFixed(2)}%`;
+    byId("ma5").textContent = money(data.ma5);
+    byId("ma10").textContent = money(data.ma10);
+    byId("ma20").textContent = money(data.ma20);
+    byId("turnover").textContent = `${money(data.turnover)} 亿元`;
+    byId("volume-ratio").textContent = Number(data.volume_ratio).toFixed(2);
 }
