@@ -190,15 +190,15 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
         data["volume_ratio"],
     )
 
-    if score >= 70:
+    if score >= 75:
         strength = "偏强"
-        plan = "可以持有观察，冲高分批卖。接近卖出参考位时关注量能，避免追高加仓。"
-    elif score >= 40:
+        plan = "偏强，持有观察，冲高分批止盈"
+    elif score >= 50:
         strength = "震荡"
-        plan = "不追高，接近压力位减仓。若量能无法持续放大，优先保护已有利润。"
+        plan = "震荡，不追高，接近压力位减仓"
     else:
         strength = "偏弱"
-        plan = "跌破止损位要控制风险。不盲目补仓，等待价格重新站稳后再观察。"
+        plan = "偏弱，跌破止损位要控制风险"
 
     stop_loss = round(min(current_price * 0.98, max(cost_price * 0.95, low_price * 0.99)), 2)
     sell_reference = round(max(high_price, current_price * 1.03), 2)
@@ -242,7 +242,7 @@ def quote(stock_code: str):
         return jsonify({
             "success": False,
             "mode": "fallback",
-            "message": "行情获取失败，已切换为手动输入模式",
+            "message": "行情获取失败，请稍后重试或手动输入",
             "data": data,
             **data,
         })
@@ -302,3 +302,4 @@ def analyze():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
