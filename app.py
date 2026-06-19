@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import random
+import math
 import re
 from typing import Any
 
@@ -12,73 +11,104 @@ app = Flask(__name__)
 STOCK_CODE_PATTERN = re.compile(r"^\d{6}$")
 
 
-def build_mock_report(stock_code: str, cost_price: float, shares: int) -> dict[str, Any]:
-    """Build a stable mock quote and calculate the user's position result."""
-    seed = int(hashlib.sha256(stock_code.encode("utf-8")).hexdigest()[:16], 16)
-    rng = random.Random(seed)
+def calculate_score(
+    current_price: float,
+    cost_price: float,
+    high_price: float,
+    low_price: float,
+    change_percent: float,
+    volume_ratio: float,
+) -> tuple[int, list[str]]:
+    """Calculate a transparent 0-100 intraday strength score."""
+    score = 50
+    reasons: list[str] = []
 
-    current_price = 20.05 if stock_code == "000547" else round(rng.uniform(5, 80), 2)
-    change_percent = round(rng.uniform(-6.5, 7.5), 2)
-    ma5 = round(current_price * rng.uniform(0.975, 1.025), 2)
-    ma10 = round(current_price * rng.uniform(0.96, 1.04), 2)
-    ma20 = round(current_price * rng.uniform(0.94, 1.06), 2)
-    turnover = round(rng.uniform(1.2, 38.0), 2)
-    volume_ratio = round(rng.uniform(0.65, 2.8), 2)
+    if current_price > cost_price:
+        score += 15
+        reasons.append("当前价高于成本 +15")
+    elif current_price < cost_price:
+        score -= 15
+        reasons.append("当前价跌破成本 -15")
 
-    if current_price > ma5 > ma10 > ma20:
-        trend = "偏强上行"
-        advice = "短线趋势较强，可关注回踩 MA5 后的承接力度，避免追高。"
-    elif current_price < ma5 < ma10 < ma20:
-        trend = "偏弱下行"
-        advice = "短线仍偏弱，建议耐心等待企稳信号，严格控制仓位。"
-    else:
-        trend = "震荡整理"
-        advice = "均线方向尚未统一，适合观望或轻仓高抛低吸。"
+    price_range = high_price - low_price
+    range_position = (current_price - low_price) / price_range if price_range else 0.5
+    if range_position >= 0.8:
+        score += 20
+        reasons.append("当前价接近今日高点 +20")
+    elif range_position <= 0.2:
+        score -= 20
+        reasons.append("当前价接近今日低点 -20")
 
-    support = round(min(current_price, ma10, ma20) * 0.985, 2)
-    resistance = round(max(current_price, ma5, ma10) * 1.025, 2)
-    stop_loss = round(min(support * 0.97, cost_price * 0.95), 2)
-    sell_reference = round(max(resistance, current_price * 1.06), 2)
+    if volume_ratio > 1:
+        score += 15
+        reasons.append("量比大于 1 +15")
+
+    if change_percent > 0:
+        score += 15
+        reasons.append("今日涨幅为正 +15")
+    elif change_percent < 0:
+        score -= 15
+        reasons.append("今日涨幅为负 -15")
+
+    return max(0, min(100, score)), reasons
+
+
+def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
+    current_price = data["current_price"]
+    cost_price = data["cost_price"]
+    high_price = data["high_price"]
+    low_price = data["low_price"]
+    shares = data["shares"]
+
     market_value = round(current_price * shares, 2)
     profit_loss = round((current_price - cost_price) * shares, 2)
     profit_loss_ratio = round((current_price - cost_price) / cost_price * 100, 2)
+    cost_gap = round(current_price - cost_price, 2)
+    cost_gap_ratio = round(cost_gap / cost_price * 100, 2)
+    high_gap = round(high_price - current_price, 2)
+    high_gap_ratio = round(high_gap / high_price * 100, 2)
+    low_gap = round(current_price - low_price, 2)
+    low_gap_ratio = round(low_gap / low_price * 100, 2)
 
-    if current_price <= stop_loss * 1.02:
-        stop_loss_advice = f"价格已接近止损区域 {stop_loss:.2f} 元，建议严格控制风险。"
-    else:
-        stop_loss_advice = f"可将 {stop_loss:.2f} 元作为短线止损参考，跌破后谨慎持有。"
+    score, score_reasons = calculate_score(
+        current_price,
+        cost_price,
+        high_price,
+        low_price,
+        data["change_percent"],
+        data["volume_ratio"],
+    )
 
-    if profit_loss_ratio >= 8:
-        position_advice = "当前已有一定浮盈，可分批止盈并上移保护位，避免利润回吐。"
-    elif profit_loss_ratio <= -5:
-        position_advice = "持仓处于亏损区间，不建议盲目补仓，优先执行止损纪律。"
-    elif trend == "偏强上行":
-        position_advice = "短线结构偏强，可继续观察，冲高接近参考位时考虑分批减仓。"
+    if score >= 70:
+        strength = "偏强"
+        plan = "可以持有观察，冲高分批卖。接近卖出参考位时关注量能，避免追高加仓。"
+    elif score >= 40:
+        strength = "震荡"
+        plan = "不追高，接近压力位减仓。若量能无法持续放大，优先保护已有利润。"
     else:
-        position_advice = "短线方向仍需确认，建议控制仓位，等待放量突破或企稳信号。"
+        strength = "偏弱"
+        plan = "跌破止损位要控制风险。不盲目补仓，等待价格重新站稳后再观察。"
+
+    stop_loss = round(min(current_price * 0.98, max(cost_price * 0.95, low_price * 0.99)), 2)
+    sell_reference = round(max(high_price, current_price * 1.03), 2)
 
     return {
-        "stock_code": stock_code,
-        "current_price": current_price,
-        "cost_price": round(cost_price, 2),
-        "shares": shares,
+        **data,
         "market_value": market_value,
         "profit_loss": profit_loss,
         "profit_loss_ratio": profit_loss_ratio,
-        "change_percent": change_percent,
-        "ma5": ma5,
-        "ma10": ma10,
-        "ma20": ma20,
-        "turnover": turnover,
-        "volume_ratio": volume_ratio,
-        "trend": trend,
-        "support": support,
-        "resistance": resistance,
+        "cost_gap": cost_gap,
+        "cost_gap_ratio": cost_gap_ratio,
+        "high_gap": high_gap,
+        "high_gap_ratio": high_gap_ratio,
+        "low_gap": low_gap,
+        "low_gap_ratio": low_gap_ratio,
+        "score": score,
+        "score_reasons": score_reasons,
+        "strength": strength,
         "stop_loss": stop_loss,
-        "stop_loss_advice": stop_loss_advice,
         "sell_reference": sell_reference,
-        "advice": position_advice,
-        "market_advice": advice,
+        "plan": plan,
     }
 
 
@@ -91,22 +121,52 @@ def index() -> str:
 def analyze():
     payload = request.get_json(silent=True) or {}
     stock_code = str(payload.get("stock_code", "")).strip()
+    stock_name = str(payload.get("stock_name", "")).strip()
 
     if not STOCK_CODE_PATTERN.fullmatch(stock_code):
         return jsonify({"error": "请输入正确的 6 位 A 股股票代码"}), 400
+    if not stock_name or len(stock_name) > 20:
+        return jsonify({"error": "请输入 1–20 个字符的股票名称"}), 400
 
+    number_fields = {
+        "current_price": "当前价",
+        "high_price": "今日最高价",
+        "low_price": "今日最低价",
+        "change_percent": "今日涨跌幅",
+        "turnover": "成交额",
+        "volume_ratio": "量比",
+        "cost_price": "买入成本价",
+        "shares": "持仓股数",
+    }
+    values: dict[str, float] = {}
     try:
-        cost_price = float(payload.get("cost_price", 0))
-        shares_value = float(payload.get("shares", 0))
+        for key in number_fields:
+            value = float(payload.get(key, ""))
+            if not math.isfinite(value):
+                raise ValueError
+            values[key] = value
     except (TypeError, ValueError):
-        return jsonify({"error": "买入成本和持仓股数必须是有效数字"}), 400
+        return jsonify({"error": "请完整填写所有行情与持仓数字"}), 400
 
-    if cost_price <= 0:
-        return jsonify({"error": "买入成本必须大于 0"}), 400
-    if shares_value <= 0 or not shares_value.is_integer():
-        return jsonify({"error": "持仓股数必须是大于 0 的整数"}), 400
+    positive_fields = ("current_price", "high_price", "low_price", "cost_price", "shares")
+    if any(values[key] <= 0 for key in positive_fields):
+        return jsonify({"error": "价格、成本和持仓股数必须大于 0"}), 400
+    if values["turnover"] < 0 or values["volume_ratio"] < 0:
+        return jsonify({"error": "成交额和量比不能小于 0"}), 400
+    if not values["shares"].is_integer():
+        return jsonify({"error": "持仓股数必须是整数"}), 400
+    if values["high_price"] < values["low_price"]:
+        return jsonify({"error": "今日最高价不能低于今日最低价"}), 400
+    if not values["low_price"] <= values["current_price"] <= values["high_price"]:
+        return jsonify({"error": "当前价应位于今日最低价和最高价之间"}), 400
 
-    return jsonify(build_mock_report(stock_code, cost_price, int(shares_value)))
+    data: dict[str, Any] = {
+        "stock_code": stock_code,
+        "stock_name": stock_name,
+        **values,
+        "shares": int(values["shares"]),
+    }
+    return jsonify(build_analysis(data))
 
 
 if __name__ == "__main__":
