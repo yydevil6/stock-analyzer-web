@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="使用模拟行情数据生成 A 股短线分析报告">
+    <title>A 股短线分析助手</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="page-shell">
+        <section class="hero">
+            <div class="brand"><span class="brand-dot"></span> Stock Lens</div>
+            <p class="eyebrow">A 股短线分析工具</p>
+            <h1>看清趋势，再做决定。</h1>
+            <p class="subtitle">输入 6 位股票代码，快速生成一份清晰的短线分析报告。</p>
+
+            <form id="analysis-form" class="search-box" novalidate>
+                <label for="stock-code" class="sr-only">股票代码</label>
+                <input id="stock-code" name="stock-code" type="text" inputmode="numeric"
+                       maxlength="6" placeholder="例如：000547" autocomplete="off" required>
+                <button type="submit" id="analyze-button">
+                    <span class="button-text">开始分析</span>
+                    <span class="button-loader" aria-hidden="true"></span>
+                </button>
+            </form>
+            <p id="error-message" class="error-message" role="alert"></p>
+            <p class="mock-note">当前为演示版本，报告使用模拟数据生成，不构成投资建议。</p>
+        </section>
+
+        <section id="report" class="report" aria-live="polite" hidden>
+            <header class="report-header">
+                <div>
+                    <p class="eyebrow">短线分析报告</p>
+                    <h2 id="report-code">—</h2>
+                </div>
+                <span id="trend-badge" class="trend-badge">—</span>
+            </header>
+
+            <div class="price-panel">
+                <div>
+                    <span class="metric-label">当前价格</span>
+                    <strong id="current-price" class="price">—</strong>
+                </div>
+                <div class="change-wrap">
+                    <span class="metric-label">今日涨跌幅</span>
+                    <strong id="change-percent" class="change">—</strong>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <article class="metric-card"><span>MA5</span><strong id="ma5">—</strong></article>
+                <article class="metric-card"><span>MA10</span><strong id="ma10">—</strong></article>
+                <article class="metric-card"><span>MA20</span><strong id="ma20">—</strong></article>
+                <article class="metric-card"><span>成交额</span><strong id="turnover">—</strong></article>
+                <article class="metric-card"><span>量比</span><strong id="volume-ratio">—</strong></article>
+                <article class="metric-card"><span>短线趋势</span><strong id="trend">—</strong></article>
+            </div>
+
+            <div class="levels">
+                <article><span>支撑位</span><strong id="support">—</strong></article>
+                <article><span>压力位</span><strong id="resistance">—</strong></article>
+                <article><span>止损位</span><strong id="stop-loss">—</strong></article>
+            </div>
+
+            <article class="advice-card">
+                <span class="advice-icon">↗</span>
+                <div><span>操作建议</span><p id="advice">—</p></div>
+            </article>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
