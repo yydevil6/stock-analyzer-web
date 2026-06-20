@@ -19,6 +19,11 @@ LOCAL_STOCK_NAMES = {
     "000001": "平安银行",
     "600519": "贵州茅台",
     "300750": "宁德时代",
+    "002594": "比亚迪",
+    "601318": "中国平安",
+    "600036": "招商银行",
+    "601398": "工商银行",
+    "000858": "五粮液",
 }
 
 
@@ -129,30 +134,38 @@ def calculate_score(
     low_price: float,
     change_percent: float,
     volume_ratio: float,
+    stop_price: float,
 ) -> tuple[int, list[str]]:
     """Calculate a transparent 0-100 intraday strength score."""
     score = 50
     reasons: list[str] = []
 
     if current_price > cost_price:
-        score += 15
-        reasons.append("当前价高于成本 +15")
+        score += 20
+        reasons.append("当前价高于成本 +20")
     elif current_price < cost_price:
-        score -= 15
-        reasons.append("当前价跌破成本 -15")
+        score -= 20
+        reasons.append("当前价低于成本 -20")
 
     price_range = high_price - low_price
     range_position = (current_price - low_price) / price_range if price_range else 0.5
     if range_position >= 0.8:
-        score += 20
-        reasons.append("当前价接近今日高点 +20")
+        score += 15
+        reasons.append("当前价接近今日高点 +15")
     elif range_position <= 0.2:
-        score -= 20
-        reasons.append("当前价接近今日低点 -20")
+        score -= 15
+        reasons.append("当前价接近今日低点 -15")
+
+    if range_position >= 0.5:
+        score += 10
+        reasons.append("当前价远离今日低点 +10")
 
     if volume_ratio > 1:
-        score += 15
-        reasons.append("量比大于 1 +15")
+        score += 10
+        reasons.append("量比大于 1 +10")
+    elif volume_ratio < 0.8:
+        score -= 10
+        reasons.append("量比小于 0.8 -10")
 
     if change_percent > 0:
         score += 15
@@ -160,6 +173,10 @@ def calculate_score(
     elif change_percent < 0:
         score -= 15
         reasons.append("今日涨幅为负 -15")
+
+    if current_price <= stop_price:
+        score -= 30
+        reasons.append("当前价跌破止损价 -30")
 
     return max(0, min(100, score)), reasons
 
@@ -181,6 +198,13 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
     low_gap = round(current_price - low_price, 2)
     low_gap_ratio = round(low_gap / low_price * 100, 2)
 
+    suggested_stop = round(min(current_price * 0.98, max(cost_price * 0.95, low_price * 0.99)), 2)
+    stop_loss = round(float(data.get("stop_alert") or suggested_stop), 2)
+    suggested_sell = round(max(high_price, current_price * 1.03), 2)
+    sell_reference = round(float(data.get("sell_alert") or suggested_sell), 2)
+    suggested_pressure = round(max(high_price * 1.02, current_price * 1.06, sell_reference * 1.02), 2)
+    pressure_reference = round(float(data.get("pressure_alert") or suggested_pressure), 2)
+
     score, score_reasons = calculate_score(
         current_price,
         cost_price,
@@ -188,6 +212,7 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
         low_price,
         data["change_percent"],
         data["volume_ratio"],
+        stop_loss,
     )
 
     if score >= 75:
@@ -200,8 +225,14 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
         strength = "偏弱"
         plan = "偏弱，跌破止损位要控制风险"
 
-    stop_loss = round(min(current_price * 0.98, max(cost_price * 0.95, low_price * 0.99)), 2)
-    sell_reference = round(max(high_price, current_price * 1.03), 2)
+    if current_price <= stop_loss:
+        status = "触发止损"
+        plan = "已触发止损提醒，请控制风险"
+    elif current_price >= sell_reference:
+        status = "接近卖出位"
+        plan = "已接近冲高卖出位，可考虑分批止盈"
+    else:
+        status = strength
 
     return {
         **data,
@@ -217,8 +248,10 @@ def build_analysis(data: dict[str, Any]) -> dict[str, Any]:
         "score": score,
         "score_reasons": score_reasons,
         "strength": strength,
+        "status": status,
         "stop_loss": stop_loss,
         "sell_reference": sell_reference,
+        "pressure_reference": pressure_reference,
         "plan": plan,
     }
 
@@ -242,7 +275,7 @@ def quote(stock_code: str):
         return jsonify({
             "success": False,
             "mode": "fallback",
-            "message": "行情获取失败，请稍后重试或手动输入",
+            "message": "行情获取失败，已切换为手动输入模式",
             "data": data,
             **data,
         })
@@ -297,6 +330,16 @@ def analyze():
         **values,
         "shares": int(values["shares"]),
     }
+    for key in ("stop_alert", "sell_alert", "pressure_alert"):
+        raw_value = payload.get(key)
+        if raw_value not in (None, ""):
+            try:
+                reminder_value = float(raw_value)
+            except (TypeError, ValueError):
+                return jsonify({"error": "提醒价必须是有效数字"}), 400
+            if not math.isfinite(reminder_value) or reminder_value <= 0:
+                return jsonify({"error": "提醒价必须大于 0"}), 400
+            data[key] = reminder_value
     return jsonify(build_analysis(data))
 
 
