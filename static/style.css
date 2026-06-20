@@ -58,8 +58,8 @@ button:disabled { opacity: .7; cursor: wait; transform: none; }
 .secondary-button:hover { color: white; background: var(--primary); }
 .quote-button { border: 1px solid rgba(198,138,40,.28); color: #9a671d; background: #fff8ea; }
 .quote-button:hover { color: white; background: #ad7622; }
-.quote-button.loading .quote-button-text { display: none; }
-.quote-button.loading .button-loader { display: block; border-top-color: #9a671d; }
+.quote-button.loading .quote-button-text { display: inline; }
+.quote-button.loading .button-loader { display: none; }
 .button-loader { display: none; width: 18px; height: 18px; margin: auto; border: 2px solid rgba(255,255,255,.35); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; }
 button.loading .button-text { display: none; } button.loading .button-loader { display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -79,14 +79,14 @@ button.loading .button-text { display: none; } button.loading .button-loader { d
 .profit-card.profit { background: linear-gradient(125deg,#a13732,var(--red)); }.profit-card.loss { background: linear-gradient(125deg,#0b6443,var(--green)); }
 .metrics-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin: 13px 0; }
 .metrics-grid article { padding: 18px; border: 1px solid var(--line); border-radius: 14px; }.metrics-grid strong { display: block; margin: 7px 0 3px; font-size: 20px; }.metrics-grid small { color: var(--muted); }
-.levels-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.levels-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 13px; }
 .levels-grid article { padding: 20px; border: 1px solid var(--line); border-radius: 15px; background: #fafcfb; }.levels-grid strong { display: block; margin: 8px 0 5px; font-size: 24px; }.levels-grid strong b { font-weight: 800; }.levels-grid p { margin: 0; color: var(--muted); font-size: 11px; }
 .plan-card { margin-top: 13px; padding: 22px; border-radius: 15px; color: #effaf4; background: var(--primary-dark); }.plan-card > span { color: #a4cbb9; }.plan-card p { margin: 8px 0 0; line-height: 1.75; }
 .position-details { margin-top: 14px; border-top: 1px solid var(--line); }.position-details summary { padding: 16px 2px 0; color: var(--primary); font-size: 12px; font-weight: 750; cursor: pointer; }
 .detail-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; padding-top: 13px; }.detail-grid > span { padding: 13px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 11px; }.detail-grid strong { display: block; margin-top: 5px; color: var(--ink); font-size: 15px; }
 .watchlist-panel { margin-top: 18px; }
 .alerts-panel { margin-top: 18px; }
-.monitor-toolbar { display: flex; align-items: center; gap: 10px; margin: -8px 0 20px; padding: 12px; border-radius: 12px; background: #f5f8f6; }
+.monitor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: -8px 0 20px; padding: 12px; border-radius: 12px; background: #f5f8f6; }
 .monitor-toolbar label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .monitor-toolbar select { height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 0 27px 0 10px; color: var(--ink); background: white; }
 .monitor-toolbar > span { color: var(--muted); font-size: 11px; }
@@ -157,6 +157,6 @@ button.loading .button-text { display: none; } button.loading .button-loader { d
     .input-panel,.report,.watchlist-panel,.alerts-panel { padding: 20px 15px; border-radius: 18px; }.section-heading { align-items: flex-start; }.section-heading > p { display: none; }.form-grid { grid-template-columns: 1fr 1fr; gap: 8px; }.form-grid label { padding: 11px; }.form-action { align-items: stretch; flex-direction: column; }.form-buttons { flex-direction: column; }.form-action button { width: 100%; }.form-action small { display: block; line-height: 1.6; }
     .report-heading { align-items: center; }.score-card { align-items: flex-start; gap: 15px; padding: 17px; }.score-ring { flex-basis: 86px; height: 86px; }.score-ring strong { font-size: 29px; }.profit-card { padding: 21px; }.metrics-grid { grid-template-columns: 1fr 1fr; }.metrics-grid article { padding: 14px 12px; }.metrics-grid strong { font-size: 17px; }.levels-grid { grid-template-columns: 1fr; }.detail-grid { grid-template-columns: 1fr 1fr; }
     .watchlist-table-wrap { overflow: visible; }.watchlist-table thead { display: none; }.watchlist-table,.watchlist-table tbody,.watchlist-table tr,.watchlist-table td { display: block; width: 100%; }.watchlist-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 15px; margin-bottom: 12px; padding: 15px; border: 1px solid var(--line); border-radius: 13px; background: #fbfcfb; }.watchlist-table tr:last-child { margin-bottom: 0; }.watchlist-table td { padding: 0; border: 0; white-space: normal; }.watchlist-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: var(--muted); font-size: 10px; font-weight: 400; }.stock-cell,.row-actions { grid-column: 1 / -1; }.row-actions { display: flex !important; }.table-button { flex: 1; }
-    .monitor-toolbar { flex-wrap: wrap; align-items: center; }.monitor-toolbar #last-update { width: 100%; order: 3; }.monitor-toolbar #refresh-message { width: 100%; margin-left: 0; order: 4; }.monitor-metrics { grid-template-columns: 1fr 1fr; }.monitor-plan { grid-template-columns: 1fr; gap: 5px; }.monitor-card-footer { flex-wrap: wrap; }.monitor-card-footer small { width: 100%; margin-bottom: 3px; }.monitor-card-footer .table-button { flex: 1; }.alert-record { grid-template-columns: 1fr; gap: 8px; }.alert-record-info { flex-wrap: wrap; }
+    .monitor-toolbar { flex-wrap: wrap; align-items: center; }.monitor-toolbar #auto-refresh-status,.monitor-toolbar #last-update { width: 100%; order: 3; }.monitor-toolbar #last-update { order: 4; }.monitor-toolbar #refresh-message { width: 100%; margin-left: 0; order: 5; }.monitor-metrics { grid-template-columns: 1fr 1fr; }.monitor-plan { grid-template-columns: 1fr; gap: 5px; }.monitor-card-footer { flex-wrap: wrap; }.monitor-card-footer small { width: 100%; margin-bottom: 3px; }.monitor-card-footer .table-button { flex: 1 1 calc(50% - 7px); }.alert-record { grid-template-columns: 1fr; gap: 8px; }.alert-record-info { flex-wrap: wrap; }
 }
 
