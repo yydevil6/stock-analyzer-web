@@ -14,6 +14,7 @@ const ALERTS_KEY = "stock-lens-alert-records-v1";
 const LOCAL_NAMES = {
     "000547": "航天发展", "002086": "东方海洋", "000001": "平安银行", "600519": "贵州茅台", "300750": "宁德时代",
     "002594": "比亚迪", "601318": "中国平安", "600036": "招商银行", "601398": "工商银行", "000858": "五粮液",
+    "000545": "金浦钛业",
 };
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 const inputIds = {
@@ -39,6 +40,7 @@ stockCodeInput.addEventListener("input", () => {
     stockCodeInput.value = stockCodeInput.value.replace(/\D/g, "").slice(0, 6);
     quoteMessage.textContent = "";
     quoteMessage.className = "";
+    setDataSource(false);
 });
 form.addEventListener("input", () => {
     errorMessage.textContent = "";
@@ -66,12 +68,22 @@ async function fetchQuote() {
     setQuoteLoading(true);
     try {
         const result = await requestQuote(stockCode);
-        fillQuoteData(result.data);
-        quoteMessage.textContent = result.success ? "行情获取成功" : "行情获取失败，已切换为手动输入模式";
-        quoteMessage.className = result.success ? "quote-success" : "quote-warning";
+        if (result.success === true && result.mode === "live") {
+            fillQuoteData(result.data);
+            quoteMessage.textContent = "行情获取成功";
+            quoteMessage.className = "quote-success";
+            setDataSource(true);
+        } else {
+            fillStockNameOnly(result.data, stockCode);
+            quoteMessage.textContent = "真实行情获取失败，请手动输入行情数据。";
+            quoteMessage.className = "quote-warning";
+            setDataSource(false);
+        }
     } catch {
-        quoteMessage.textContent = "行情获取失败，已切换为手动输入模式";
+        fillStockNameOnly({ name: LOCAL_NAMES[stockCode] }, stockCode);
+        quoteMessage.textContent = "真实行情获取失败，请手动输入行情数据。";
         quoteMessage.className = "quote-warning";
+        setDataSource(false);
     } finally {
         setQuoteLoading(false);
     }
@@ -103,6 +115,20 @@ function fillQuoteData(data) {
     Object.entries(fields).forEach(([key, value]) => {
         if (value !== undefined && value !== null) byId(inputIds[key]).value = value;
     });
+}
+
+function fillStockNameOnly(data, code) {
+    const nameInput = byId(inputIds.stock_name);
+    const currentName = nameInput.value.trim();
+    const isPreviousAutomaticName = Object.values(LOCAL_NAMES).includes(currentName) || currentName === "未知股票名称";
+    if (currentName && currentName !== code && !isPreviousAutomaticName) return;
+    nameInput.value = safeStockName(code, data?.name || data?.stock_name);
+}
+
+function setDataSource(isLive) {
+    const source = byId("data-source");
+    source.textContent = isLive ? "数据来源：真实行情" : "数据来源：未获取到真实行情，请手动输入";
+    source.className = `data-source ${isLive ? "data-source-live" : "data-source-manual"}`;
 }
 
 async function analyzeCurrentForm(event) {
@@ -333,7 +359,7 @@ async function handleWatchlistAction(event) {
             actionButton.disabled = false;
             actionButton.textContent = "获取行情";
         }
-        byId("refresh-message").textContent = success ? `${item.stock_name} 行情已更新` : "行情获取失败，已切换为手动输入模式";
+        byId("refresh-message").textContent = success ? `${item.stock_name} 真实行情已更新` : "真实行情获取失败，请手动输入行情数据。";
         return;
     }
     fillFromWatchlist(item);
@@ -343,8 +369,7 @@ async function handleWatchlistAction(event) {
 }
 
 function fillFromWatchlist(item) {
-    const fallback = Number(item.cost_price);
-    const market = item.market || { current_price: fallback, high_price: fallback, low_price: fallback, change_percent: 0, turnover: 0, volume_ratio: 1 };
+    const market = item.market || { current_price: "", high_price: "", low_price: "", change_percent: "", turnover: "", volume_ratio: "" };
     const values = { ...market, stock_code: item.stock_code, stock_name: item.stock_name, cost_price: item.cost_price, shares: item.shares };
     Object.entries(inputIds).forEach(([key, id]) => { byId(id).value = values[key]; });
     Object.entries(reminderIds).forEach(([key, id]) => { byId(id).value = item.reminders[key]; });
@@ -460,7 +485,7 @@ async function refreshStockAt(index) {
     const item = watchlist[index];
     try {
         const quoteResult = await requestQuote(item.stock_code);
-        if (!quoteResult.success) return false;
+        if (quoteResult.success !== true || quoteResult.mode !== "live") return false;
         const quote = quoteResult.data;
         const payload = {
             stock_code: item.stock_code,
@@ -526,7 +551,7 @@ async function refreshWatchlist() {
     }));
     const now = new Date();
     byId("last-update").textContent = `最后更新时间：${timeLabel(now)}`;
-    byId("refresh-message").textContent = failures ? "行情获取失败，已切换为手动输入模式" : "自选股行情已更新";
+    byId("refresh-message").textContent = failures ? "部分或全部股票未获取到真实行情，已保留原有数据" : "自选股真实行情已更新";
     persistWatchlist();
     persistAlertRecords();
     renderWatchlist();
