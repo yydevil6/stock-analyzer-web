@@ -78,6 +78,7 @@
             <div class="levels-grid">
                 <article><span>止损参考位</span><strong><b id="stop-loss">—</b> 元</strong><p>跌破参考位时优先控制风险</p></article>
                 <article><span>冲高卖出参考位</span><strong><b id="sell-reference">—</b> 元</strong><p>接近参考位时观察量能并分批处理</p></article>
+                <article><span>强压力参考位</span><strong><b id="pressure-reference">—</b> 元</strong><p>触及强压力区域时注意冲高回落</p></article>
             </div>
 
             <article class="plan-card">
@@ -112,6 +113,7 @@
                     </select>
                 </label>
                 <button id="auto-refresh-button" class="monitor-button" type="button">开启自动刷新</button>
+                <span id="auto-refresh-status">自动刷新状态：未开启</span>
                 <span id="last-update">最后更新时间：--</span>
                 <span id="refresh-message" role="status"></span>
             </div>
