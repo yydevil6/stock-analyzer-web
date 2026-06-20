@@ -11,7 +11,11 @@ const byId = (id) => document.getElementById(id);
 
 const WATCHLIST_KEY = "stock-lens-watchlist-v1";
 const ALERTS_KEY = "stock-lens-alert-records-v1";
-const LOCAL_NAMES = { "000547": "航天发展", "002086": "东方海洋", "000001": "平安银行", "600519": "贵州茅台", "300750": "宁德时代" };
+const LOCAL_NAMES = {
+    "000547": "航天发展", "002086": "东方海洋", "000001": "平安银行", "600519": "贵州茅台", "300750": "宁德时代",
+    "002594": "比亚迪", "601318": "中国平安", "600036": "招商银行", "601398": "工商银行", "000858": "五粮液",
+};
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 const inputIds = {
     stock_code: "stock-code",
     stock_name: "stock-name",
@@ -63,10 +67,10 @@ async function fetchQuote() {
     try {
         const result = await requestQuote(stockCode);
         fillQuoteData(result.data);
-        quoteMessage.textContent = result.success ? "行情获取成功" : "行情获取失败，请稍后重试或手动输入";
+        quoteMessage.textContent = result.success ? "行情获取成功" : "行情获取失败，已切换为手动输入模式";
         quoteMessage.className = result.success ? "quote-success" : "quote-warning";
     } catch {
-        quoteMessage.textContent = "行情获取失败，请稍后重试或手动输入";
+        quoteMessage.textContent = "行情获取失败，已切换为手动输入模式";
         quoteMessage.className = "quote-warning";
     } finally {
         setQuoteLoading(false);
@@ -130,7 +134,12 @@ async function analyzeCurrentForm(event) {
 }
 
 function getFormData() {
-    return Object.fromEntries(Object.entries(inputIds).map(([key, id]) => [key, byId(id).value.trim()]));
+    return {
+        ...Object.fromEntries(Object.entries(inputIds).map(([key, id]) => [key, byId(id).value.trim()])),
+        stop_alert: byId(reminderIds.stop).value.trim(),
+        sell_alert: byId(reminderIds.sell).value.trim(),
+        pressure_alert: byId(reminderIds.pressure).value.trim(),
+    };
 }
 
 function validate(data) {
@@ -141,6 +150,7 @@ function validate(data) {
     if (Number(data.high_price) < Number(data.low_price)) return "今日最高价不能低于今日最低价";
     if (Number(data.current_price) < Number(data.low_price) || Number(data.current_price) > Number(data.high_price)) return "当前价应位于今日最低价和最高价之间";
     if (!Number.isInteger(Number(data.shares)) || Number(data.shares) <= 0) return "持仓股数必须是大于 0 的整数";
+    if ([data.stop_alert, data.sell_alert, data.pressure_alert].some((value) => value !== "" && (!Number.isFinite(Number(value)) || Number(value) <= 0))) return "提醒价必须是大于 0 的数字";
     return "";
 }
 
@@ -212,6 +222,7 @@ function normalizeWatchlistItem(raw) {
             pressure: positiveNumber(raw.reminders?.pressure) || roundPrice(current * 1.06),
         },
         active_alerts: Array.isArray(raw.active_alerts) ? raw.active_alerts : [],
+        last_alert_times: raw.last_alert_times && typeof raw.last_alert_times === "object" ? raw.last_alert_times : {},
         last_current_price: finiteOrNull(raw.last_current_price),
         last_change_percent: finiteOrNull(raw.last_change_percent ?? raw.market?.change_percent),
         last_market_value: finiteOrNull(raw.last_market_value),
@@ -255,7 +266,11 @@ function createMonitorCard(item) {
         metric("当前市值", formatOptionalMoney(item.last_market_value)),
         metric("浮动盈亏", formatSignedMoney(item.last_profit_loss), profitClass(item.last_profit_loss)),
         metric("盈亏比例", formatPercent(item.last_profit_loss_ratio, true), profitClass(item.last_profit_loss_ratio)),
-        metric("超短线评分", item.last_score == null ? "—" : `${item.last_score} / 100`)
+        metric("超短线评分", item.last_score == null ? "—" : `${item.last_score} / 100`),
+        metric("今日最高", formatOptionalMoney(item.market?.high_price)),
+        metric("今日最低", formatOptionalMoney(item.market?.low_price)),
+        metric("成交额", item.market?.turnover == null ? "—" : `${money(item.market.turnover)} 亿元`),
+        metric("量比", item.market?.volume_ratio == null ? "—" : money(item.market.volume_ratio))
     );
 
     const reminderRow = element("div", "reminder-levels");
@@ -274,7 +289,9 @@ function createMonitorCard(item) {
     const footer = element("div", "monitor-card-footer");
     footer.append(
         textElement("small", item.last_updated ? `更新于 ${item.last_updated}` : "尚未更新行情"),
+        createActionButton("获取行情", "quote", item.stock_code),
         createActionButton("分析", "analyze", item.stock_code),
+        createActionButton("编辑", "edit", item.stock_code),
         createActionButton("删除", "delete", item.stock_code)
     );
     card.append(header, metrics, reminderRow, notices, plan, footer);
@@ -295,7 +312,7 @@ function createActionButton(text, action, code) {
     return button;
 }
 
-function handleWatchlistAction(event) {
+async function handleWatchlistAction(event) {
     const actionButton = event.target.closest("button[data-action]");
     if (!actionButton) return;
     const item = watchlist.find((stock) => stock.stock_code === actionButton.dataset.code);
@@ -308,8 +325,21 @@ function handleWatchlistAction(event) {
         if (!watchlist.length) stopAutoRefresh();
         return;
     }
+    if (actionButton.dataset.action === "quote") {
+        actionButton.disabled = true;
+        actionButton.textContent = "获取中...";
+        const success = await refreshSingleStock(item);
+        if (!success) {
+            actionButton.disabled = false;
+            actionButton.textContent = "获取行情";
+        }
+        byId("refresh-message").textContent = success ? `${item.stock_name} 行情已更新` : "行情获取失败，已切换为手动输入模式";
+        return;
+    }
     fillFromWatchlist(item);
-    form.requestSubmit();
+    document.querySelector(".input-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (actionButton.dataset.action === "analyze") form.requestSubmit();
+    else saveMessage.textContent = `正在编辑 ${item.stock_name}，修改后请重新保存`;
 }
 
 function fillFromWatchlist(item) {
@@ -366,9 +396,15 @@ function getTriggeredAlerts(item) {
 function processAlertTransitions(item) {
     const previous = new Set(item.active_alerts || []);
     const triggered = getTriggeredAlerts(item);
-    triggered.filter((alert) => !previous.has(alert.type)).forEach((alert) => {
+    const now = Date.now();
+    item.last_alert_times = item.last_alert_times || {};
+    triggered.filter((alert) => {
+        const lastTime = Number(item.last_alert_times[alert.type] || 0);
+        return !previous.has(alert.type) && now - lastTime >= ALERT_COOLDOWN_MS;
+    }).forEach((alert) => {
+        item.last_alert_times[alert.type] = now;
         alertRecords.unshift({
-            id: `${Date.now()}-${item.stock_code}-${alert.type}`,
+            id: `${now}-${item.stock_code}-${alert.type}`,
             date: dateKey(new Date()),
             time: timeLabel(new Date()),
             stock_code: item.stock_code,
@@ -405,6 +441,52 @@ function planByScore(score) {
     return "偏弱，跌破止损位要控制风险";
 }
 
+async function refreshSingleStock(item) {
+    const index = watchlist.findIndex((stock) => stock.stock_code === item.stock_code);
+    if (index < 0) return false;
+    const success = await refreshStockAt(index);
+    if (success) {
+        const now = new Date();
+        byId("last-update").textContent = `最后更新时间：${timeLabel(now)}`;
+        persistWatchlist();
+        persistAlertRecords();
+        renderWatchlist();
+        renderAlertRecords();
+    }
+    return success;
+}
+
+async function refreshStockAt(index) {
+    const item = watchlist[index];
+    try {
+        const quoteResult = await requestQuote(item.stock_code);
+        if (!quoteResult.success) return false;
+        const quote = quoteResult.data;
+        const payload = {
+            stock_code: item.stock_code,
+            stock_name: safeStockName(item.stock_code, quote.name || quote.stock_name),
+            current_price: quote.current_price,
+            high_price: quote.high ?? quote.high_price,
+            low_price: quote.low ?? quote.low_price,
+            change_percent: quote.change_percent,
+            turnover: quote.amount ?? quote.turnover,
+            volume_ratio: quote.volume_ratio,
+            cost_price: item.cost_price,
+            shares: item.shares,
+            stop_alert: item.reminders.stop,
+            sell_alert: item.reminders.sell,
+            pressure_alert: item.reminders.pressure,
+        };
+        const response = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const analysis = await response.json();
+        if (!response.ok) return false;
+        applyAnalysisToItem(index, analysis);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function toggleAutoRefresh() {
     if (refreshTimer) {
         stopAutoRefresh();
@@ -419,7 +501,8 @@ function toggleAutoRefresh() {
     byId("auto-refresh-button").textContent = "停止自动刷新";
     byId("auto-refresh-button").classList.add("active");
     byId("refresh-interval").disabled = true;
-    byId("refresh-message").textContent = `已开启，每 ${seconds} 秒刷新`;
+    byId("auto-refresh-status").textContent = `自动刷新状态：已开启，每 ${seconds} 秒刷新`;
+    byId("refresh-message").textContent = "";
     refreshWatchlist();
 }
 
@@ -429,7 +512,8 @@ function stopAutoRefresh() {
     byId("auto-refresh-button").textContent = "开启自动刷新";
     byId("auto-refresh-button").classList.remove("active");
     byId("refresh-interval").disabled = false;
-    byId("refresh-message").textContent = "自动刷新已停止";
+    byId("auto-refresh-status").textContent = "自动刷新状态：已停止";
+    byId("refresh-message").textContent = "";
 }
 
 async function refreshWatchlist() {
@@ -437,37 +521,12 @@ async function refreshWatchlist() {
     isRefreshing = true;
     byId("refresh-message").textContent = "正在刷新自选股行情…";
     let failures = 0;
-    await Promise.all(watchlist.map(async (item, index) => {
-        try {
-            const quoteResult = await requestQuote(item.stock_code);
-            if (!quoteResult.success) {
-                failures += 1;
-                return;
-            }
-            const quote = quoteResult.data;
-            const payload = {
-                stock_code: item.stock_code,
-                stock_name: safeStockName(item.stock_code, quote.name || quote.stock_name),
-                current_price: quote.current_price,
-                high_price: quote.high ?? quote.high_price,
-                low_price: quote.low ?? quote.low_price,
-                change_percent: quote.change_percent,
-                turnover: quote.amount ?? quote.turnover,
-                volume_ratio: quote.volume_ratio,
-                cost_price: item.cost_price,
-                shares: item.shares,
-            };
-            const response = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-            const analysis = await response.json();
-            if (!response.ok) throw new Error("Analysis failed");
-            applyAnalysisToItem(index, analysis);
-        } catch {
-            failures += 1;
-        }
+    await Promise.all(watchlist.map(async (_item, index) => {
+        if (!await refreshStockAt(index)) failures += 1;
     }));
     const now = new Date();
     byId("last-update").textContent = `最后更新时间：${timeLabel(now)}`;
-    byId("refresh-message").textContent = failures ? "行情获取失败，请稍后重试或手动输入" : "自选股行情已更新";
+    byId("refresh-message").textContent = failures ? "行情获取失败，已切换为手动输入模式" : "自选股行情已更新";
     persistWatchlist();
     persistAlertRecords();
     renderWatchlist();
@@ -507,11 +566,8 @@ function renderAlertRecords() {
 
 function clearAlertRecords() {
     alertRecords = [];
-    watchlist = watchlist.map((item) => ({ ...item, active_alerts: [] }));
     persistAlertRecords();
-    persistWatchlist();
     renderAlertRecords();
-    renderWatchlist();
 }
 
 function renderAnalysis(data) {
@@ -519,7 +575,7 @@ function renderAnalysis(data) {
     byId("report-name").textContent = safeStockName(data.stock_code, data.stock_name);
     byId("report-code").textContent = data.stock_code;
     byId("score").textContent = data.score;
-    byId("strength").textContent = data.strength;
+    byId("strength").textContent = data.status || data.strength;
     byId("score-reasons").textContent = data.score_reasons.join(" · ") || "暂无额外加减分项";
     byId("score-ring").style.setProperty("--score", `${data.score * 3.6}deg`);
     byId("profit-loss").textContent = signed(data.profit_loss, " 元");
@@ -534,6 +590,7 @@ function renderAnalysis(data) {
     byId("low-gap-ratio").textContent = `高于低点 ${money(data.low_gap_ratio)}%`;
     byId("stop-loss").textContent = money(data.stop_loss);
     byId("sell-reference").textContent = money(data.sell_reference);
+    byId("pressure-reference").textContent = money(data.pressure_reference);
     byId("plan").textContent = data.plan;
     byId("detail-current").textContent = `${money(data.current_price)} 元`;
     byId("detail-cost").textContent = `${money(data.cost_price)} 元`;
@@ -596,6 +653,10 @@ function trendClass(value) { return value == null ? "" : Number(value) >= 0 ? "p
 function statusClass(status) { return ({ "偏强": "strong", "震荡": "flat", "偏弱": "weak", "触发止损": "stop", "接近卖出位": "sell" })[status] || "pending"; }
 function timeLabel(date) { return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }); }
 function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
-function setQuoteLoading(loading) { fetchQuoteButton.disabled = loading; fetchQuoteButton.classList.toggle("loading", loading); }
+function setQuoteLoading(loading) {
+    fetchQuoteButton.disabled = loading;
+    fetchQuoteButton.classList.toggle("loading", loading);
+    fetchQuoteButton.querySelector(".quote-button-text").textContent = loading ? "获取中..." : "获取行情";
+}
 function setAnalyzeLoading(loading) { analyzeButton.disabled = loading; analyzeButton.classList.toggle("loading", loading); }
 
