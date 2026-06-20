@@ -44,11 +44,14 @@ h2 { margin: 0; font-size: 20px; }
 .with-unit { display: flex; align-items: end; gap: 5px; }
 .with-unit span { padding-bottom: 3px; white-space: nowrap; }
 .form-action { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 18px; }
-#error-message,#save-message,#quote-message { min-height: 17px; margin: 0; font-size: 12px; }
+#error-message,#save-message,#quote-message,.data-source { min-height: 17px; margin: 0; font-size: 12px; }
 #error-message { color: #b83d37; }
 #save-message { color: var(--primary); }
 .quote-success { color: var(--primary); }
 .quote-warning { color: var(--amber); }
+.data-source { font-weight: 700; }
+.data-source-live { color: var(--primary); }
+.data-source-manual { color: var(--muted); }
 .form-action small { color: var(--muted); }
 .form-buttons { display: flex; gap: 9px; }
 button { min-width: 155px; height: 52px; border: 0; border-radius: 12px; color: white; background: var(--primary); font-size: 15px; font-weight: 800; cursor: pointer; transition: .2s; }
