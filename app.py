@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import math
-import hashlib
-import random
+import json
 import re
 from typing import Any
 from urllib.request import Request, urlopen
@@ -24,6 +23,7 @@ LOCAL_STOCK_NAMES = {
     "600036": "招商银行",
     "601398": "工商银行",
     "000858": "五粮液",
+    "000545": "金浦钛业",
 }
 
 
@@ -75,12 +75,14 @@ def parse_tencent_quote(raw_text: str, stock_code: str) -> dict[str, Any]:
         raise ValueError("Unexpected quote response")
 
     fields = match.group(1).split("~")
-    if len(fields) < 57 or fields[2] != stock_code:
+    if len(fields) < 50 or fields[2] != stock_code:
         raise ValueError("Incomplete quote response")
 
     current_price = float(fields[3])
-    high_price = float(fields[32])
-    low_price = float(fields[33])
+    # 腾讯字段：3 当前价，30 时间，32 涨跌幅%，33 最高，34 最低，
+    # 37 成交额（万元），49 量比。不要用相邻字段猜测价格。
+    high_price = float(fields[33])
+    low_price = float(fields[34])
     if current_price <= 0 or high_price <= 0 or low_price <= 0:
         raise ValueError("Quote is not available")
 
@@ -90,14 +92,14 @@ def parse_tencent_quote(raw_text: str, stock_code: str) -> dict[str, Any]:
         "current_price": round(current_price, 2),
         "high": round(high_price, 2),
         "low": round(low_price, 2),
-        "change_percent": round(float(fields[31]), 2),
-        "amount": round(float(fields[56]) / 10000, 2),
-        "volume_ratio": round(float(fields[55]), 2),
-        "quote_time": fields[29],
+        "change_percent": round(float(fields[32]), 2),
+        "amount": round(float(fields[37]) / 10000, 2),
+        "volume_ratio": round(float(fields[49]), 2),
+        "quote_time": fields[30],
     })
 
 
-def fetch_live_quote(stock_code: str) -> dict[str, Any]:
+def fetch_tencent_quote(stock_code: str) -> dict[str, Any]:
     symbol = market_symbol(stock_code)
     request_object = Request(
         f"https://qt.gtimg.cn/q={symbol}",
@@ -108,23 +110,61 @@ def fetch_live_quote(stock_code: str) -> dict[str, Any]:
     return parse_tencent_quote(raw_text, stock_code)
 
 
-def build_fallback_quote(stock_code: str) -> dict[str, Any]:
-    seed = int(hashlib.sha256(stock_code.encode("utf-8")).hexdigest()[:16], 16)
-    rng = random.Random(seed)
-    current_price = 20.05 if stock_code == "000547" else round(rng.uniform(6, 60), 2)
-    low_price = round(current_price * rng.uniform(0.96, 0.99), 2)
-    high_price = round(current_price * rng.uniform(1.01, 1.04), 2)
+def eastmoney_secid(stock_code: str) -> str:
+    market = "1" if stock_code.startswith(("5", "6", "9")) else "0"
+    return f"{market}.{stock_code}"
+
+
+def parse_eastmoney_quote(raw_text: str, stock_code: str) -> dict[str, Any]:
+    payload = json.loads(raw_text)
+    data = payload.get("data") or {}
+    if str(data.get("f57", "")) != stock_code:
+        raise ValueError("Incomplete Eastmoney quote response")
+
+    def scaled(field: str) -> float:
+        value = data.get(field)
+        if value in (None, "", "-"):
+            raise ValueError(f"Missing Eastmoney field: {field}")
+        return float(value) / 100
+
+    current_price = scaled("f43")
+    high_price = scaled("f44")
+    low_price = scaled("f45")
+    if min(current_price, high_price, low_price) <= 0:
+        raise ValueError("Eastmoney quote is not available")
+
     return normalize_quote_fields({
         "code": stock_code,
-        "name": LOCAL_STOCK_NAMES.get(stock_code),
+        "name": data.get("f58"),
         "current_price": current_price,
-        "high": max(high_price, current_price),
-        "low": min(low_price, current_price),
-        "change_percent": round(rng.uniform(-4, 5), 2),
-        "amount": round(rng.uniform(1, 30), 2),
-        "volume_ratio": round(rng.uniform(0.7, 2.2), 2),
-        "quote_time": "模拟数据",
+        "high": high_price,
+        "low": low_price,
+        "change_percent": scaled("f170"),
+        "amount": round(float(data["f48"]) / 100000000, 2),
+        "volume_ratio": scaled("f50"),
+        "quote_time": "",
     })
+
+
+def fetch_eastmoney_quote(stock_code: str) -> dict[str, Any]:
+    fields = "f57,f58,f43,f44,f45,f170,f48,f50"
+    request_object = Request(
+        f"https://push2.eastmoney.com/api/qt/stock/get?secid={eastmoney_secid(stock_code)}&fields={fields}",
+        headers={"User-Agent": "Mozilla/5.0", "Referer": "https://quote.eastmoney.com/"},
+    )
+    with urlopen(request_object, timeout=QUOTE_TIMEOUT_SECONDS) as response:
+        raw_text = response.read().decode("utf-8", errors="replace")
+    return parse_eastmoney_quote(raw_text, stock_code)
+
+
+def fetch_live_quote(stock_code: str) -> dict[str, Any]:
+    errors: list[Exception] = []
+    for fetcher in (fetch_tencent_quote, fetch_eastmoney_quote):
+        try:
+            return fetcher(stock_code)
+        except Exception as exc:
+            errors.append(exc)
+    raise RuntimeError("All live quote sources failed") from errors[-1]
 
 
 def calculate_score(
@@ -271,11 +311,11 @@ def quote(stock_code: str):
         data = fetch_live_quote(stock_code)
         return jsonify({"success": True, "mode": "live", "message": "行情获取成功", "data": data, **data})
     except Exception:
-        data = build_fallback_quote(stock_code)
+        data = {"code": stock_code, "name": resolve_stock_name(stock_code)}
         return jsonify({
             "success": False,
-            "mode": "fallback",
-            "message": "行情获取失败，已切换为手动输入模式",
+            "mode": "manual",
+            "message": "真实行情获取失败，请手动输入行情数据。",
             "data": data,
             **data,
         })
